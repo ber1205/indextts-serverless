@@ -1,56 +1,64 @@
 # syntax=docker/dockerfile:1
 # ===========================================================================
-# IndexTTS 2.5 — RunPod Serverless（官方完整版，零功能缺失）
+# IndexTTS 2.5 — RunPod Serverless（官方完整版，零功能缺失）· 多阶段构建
 # ---------------------------------------------------------------------------
-# 组成：
-#   1. 官方代码库 index-tts/index-tts（uv 官方工作流，torch 2.8 + cu128）
-#   2. 官方全量权重 IndexTeam/IndexTTS-2.5（含 qwen0.6bemo4-merge 情绪模型）
-#   3. 辅助模型 w2v-bert-2.0 / campplus / bigvgan / MaskGCT codec（hf_cache）
-#   4. RunPod 通信网关（runpod SDK）+ 自定义 handler
-# 全部烘焙进镜像：运行期零下载，冷启动只加载显存。
+# Stage 1 (builder, devel)：官方代码 + uv 依赖 + CUDA 扩展编译 + 权重烘焙
+# Stage 2 (runtime, 更小)：拷贝 .venv + checkpoints + 编译产物 + handler
+# 官方全量功能保留：五语、情感控制、拼音/音素标注、BigVGAN CUDA kernel
 # ===========================================================================
-FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+
+# ---------------------------------------------------------------------------
+# Stage 1 — 构建器（含 nvcc，编译 BigVGAN fused CUDA kernel）
+# ---------------------------------------------------------------------------
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04 AS builder
+
+ARG HF_ENDPOINT=https://huggingface.co
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_HUB_ENABLE_HF_TRANSFER=1
+    HF_HUB_ENABLE_HF_TRANSFER=1 \
+    HF_ENDPOINT=${HF_ENDPOINT}
 
-# ---------------------------------------------------------------------------
-# 1. 系统依赖（devel 镜像自带 nvcc，供 BigVGAN CUDA kernel 编译）
-# ---------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3.10 python3.10-venv python3-pip \
         git ffmpeg curl ca-certificates build-essential cmake \
     && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# ---------------------------------------------------------------------------
-# 2. 官方代码 + 官方 uv 依赖（torch 2.8 cu128、全量多语言文本处理链）
-# ---------------------------------------------------------------------------
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/index-tts/index-tts.git /app/index-tts
 WORKDIR /app/index-tts
-RUN pip install -q uv && (uv sync --frozen 2>/dev/null || uv sync)
+RUN python3 -m pip install --no-cache-dir -q uv \
+    && (python3 -m uv sync --frozen 2>/dev/null || python3 -m uv sync)
 
-# ---------------------------------------------------------------------------
-# 3. 烘焙官方全量权重 -> /app/checkpoints（含 qwen 情绪子模型）
-#    （中国网络可加 --build-arg 或环境变量 HF_ENDPOINT=https://hf-mirror.com）
-# ---------------------------------------------------------------------------
 COPY preload_models.py /app/preload_models.py
 RUN /app/index-tts/.venv/bin/python /app/preload_models.py
 
 # ---------------------------------------------------------------------------
-# 4. RunPod 网关 + handler
+# Stage 2 — 运行时（更小、含编译产物）
 # ---------------------------------------------------------------------------
-RUN /app/index-tts/.venv/bin/pip install -q "runpod>=1.6.0" fastapi uvicorn aiohttp
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+
+ARG HF_ENDPOINT=https://huggingface.co
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/index-tts/.venv/bin:$PATH" \
+    MODEL_DIR="/app/checkpoints" \
+    PRELOAD="1"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 拷贝官方代码 + 依赖 + 已编译 CUDA 扩展
+COPY --from=builder /app/index-tts /app/index-tts
+# 拷贝烘焙好的全量权重（含 qwen 情绪模型 + hf_cache 辅助模型）
+COPY --from=builder /app/checkpoints /app/checkpoints
 
 COPY handler.py /app/index-tts/handler.py
 COPY test_input.json /app/index-tts/test_input.json
-
-ENV PATH="/app/index-tts/.venv/bin:$PATH" \
-    MODEL_DIR="/app/checkpoints" \
-    PRELOAD="1"
 
 WORKDIR /app/index-tts
 EXPOSE 8000

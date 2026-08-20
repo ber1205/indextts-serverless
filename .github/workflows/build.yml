@@ -46,7 +46,9 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE_NAME }}
-          # GitHub 海外机房直连 HuggingFace 速度快；若超时可取消注释镜像站：
+          provenance: false
+          sbom: false
+          # GitHub 海外机房直连 HuggingFace 速度快；若超时可改用镜像站：
           # build-args: |
           #   HF_ENDPOINT=https://hf-mirror.com
           cache-from: type=gha
