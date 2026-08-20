@@ -32,7 +32,7 @@ logger = logging.getLogger("indextts-serverless")
 # ---------------------------------------------------------------------------
 # 全局配置
 # ---------------------------------------------------------------------------
-MODEL_DIR = os.environ.get("MODEL_DIR", "/app/checkpoints")
+MODEL_DIR = os.environ.get("MODEL_DIR", "/runpod-volume")  # RunPod 网络卷挂载路径（权重持久化）
 PRELOAD = os.environ.get("PRELOAD", "1") == "1"          # 容器启动即后台预加载
 LANG_CODES = ("ZH", "EN", "JA", "ES", "AR")
 
@@ -44,7 +44,8 @@ _model_lock = threading.Lock()
 # 模型管理（首次启动下载权重 + 懒加载 + 线程安全）
 # ===========================================================================
 def _ensure_weights():
-    """确保官方全量权重已就绪（首次冷启动自动下载，含 qwen 情绪模型 + hf_cache）。"""
+    """确保官方全量权重已就绪（网络卷模式：首次冷启动自动下载到 /runpod-volume，
+    含 qwen 情绪模型 + hf_cache；之后权重常驻卷，秒级复用不再下载）。"""
     config_path = os.path.join(MODEL_DIR, "config.yaml")
     if os.path.isfile(config_path):
         return
@@ -53,9 +54,15 @@ def _ensure_weights():
     from indextts.utils.model_download import ensure_models_available
 
     os.makedirs(MODEL_DIR, exist_ok=True)
-    logger.info("Weights missing; downloading official IndexTeam/IndexTTS-2.5 ...")
+    logger.info("Weights missing in volume; downloading official IndexTeam/IndexTTS-2.5 ...")
     t0 = time.time()
-    huggingface_hub.snapshot_download("IndexTeam/IndexTTS-2.5", local_dir=MODEL_DIR)
+    try:
+        huggingface_hub.snapshot_download("IndexTeam/IndexTTS-2.5", local_dir=MODEL_DIR)
+    except Exception as e:
+        # 海外直连失败时自动切 hf-mirror（与官方下载器同策略）
+        logger.warning("HF direct download failed (%s); retrying via hf-mirror ...", e)
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+        huggingface_hub.snapshot_download("IndexTeam/IndexTTS-2.5", local_dir=MODEL_DIR)
     logger.info("Official weights downloaded in %.0fs", time.time() - t0)
     ensure_models_available(MODEL_DIR)
     logger.info("Auxiliary models ready in %s/hf_cache", MODEL_DIR)
