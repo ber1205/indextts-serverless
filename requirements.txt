@@ -1,0 +1,20 @@
+# ------------------------------------------------------------------
+# IndexTTS 2.5 — serverless inference dependencies (no PyTorch/CUDA)
+# PyTorch+CUDA is installed directly in the Dockerfile for speed.
+# ------------------------------------------------------------------
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+runpod>=1.7.0
+pydantic>=2.0.0
+aiohttp>=3.9.0
+soundfile>=0.12.0
+librosa>=0.10.0
+numpy>=1.26.0
+torch>=2.6.0
+torchaudio>=2.6.0
+WeTextProcessing
+pynini==2.1.6
+accelerate>=0.30.0
+sentencepiece
+huggingface-hub[cli,hf_xet]>=0.24.0
+onnxruntime-gpu>=1.18.0
