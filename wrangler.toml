@@ -1,0 +1,8 @@
+name = "indextts-gateway"
+main = "cloudflare-worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+ENDPOINT_ID = "8zcxgnz7stl1jd"
+
+# RUNPOD_API_KEY 通过 secret 注入（wrangler secret put RUNPOD_API_KEY）

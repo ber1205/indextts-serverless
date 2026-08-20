@@ -12,6 +12,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    # 只有核心运行文件变更才重建镜像；纯文档/脚本清理不触发，节省构建
+    paths:
+      - "Dockerfile"
+      - "handler.py"
 
 env:
   IMAGE_NAME: ghcr.io/ber1205/indextts-2-5:latest
