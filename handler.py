@@ -56,7 +56,7 @@ def _load_model():
             cfg_path=os.path.join(MODEL_DIR, "config.yaml"),
             model_dir=MODEL_DIR,
             use_bf16=True,          # 官方 bf16：显存/速度最优
-            use_cuda_kernel=True,   # BigVGAN fused CUDA kernel（镜像含 nvcc，失败自动回退）
+            use_cuda_kernel=False,  # 最小 base 镜像无 nvcc，走官方 torch 回退（无推理损失）
             use_qwen_emo=True,      # 加载官方 Qwen 情绪模型（emo-text 控制必需）
         )
         m.eval()
