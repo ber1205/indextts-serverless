@@ -37,7 +37,12 @@ RUN python3 -m pip install --no-cache-dir -q uv \
 # 3. RunPod 网关 + handler + HF 下载器（轻量；uv venv 无 pip，用 uv pip 安装）
 # 注意: runpod>=1.10.1 必装！官方文档: SDK 1.7.11-1.10.0 在"网络卷端点"上会损坏
 # worker 任务跟踪, 导致 worker 就绪却不拉取任务(任务永远 IN_QUEUE)。固定最新版。
-RUN python3 -m uv pip install --no-cache-dir -q "runpod==1.12.0" fastapi uvicorn aiohttp "huggingface-hub[cli,hf_xet]"
+# 关键: uv sync 创建的 venv 位于 /app/index-tts/.venv, 而 CMD 的 python 经 PATH
+# 解析为 .venv/bin/python。必须把 runpod 等显式安装进该 venv(--python 指定),
+# 否则容器启动 import runpod 即失败 crash-loop。
+RUN python3 -m uv pip install --python /app/index-tts/.venv/bin/python --no-cache-dir -q "runpod==1.12.0" fastapi uvicorn aiohttp "huggingface-hub[cli,hf_xet]" \
+    && .venv/bin/python -c "import runpod, fastapi, uvicorn, aiohttp, huggingface_hub; print('gateway deps OK, runpod', runpod.__version__)" \
+    && .venv/bin/python -c "import sys; sys.path.insert(0,'.'); import indextts; print('indextts OK')"
 
 COPY handler.py /app/index-tts/handler.py
 COPY test_input.json /app/index-tts/test_input.json
