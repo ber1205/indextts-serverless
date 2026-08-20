@@ -48,11 +48,10 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}
           provenance: false
           sbom: false
-          # GitHub 海外机房直连 HuggingFace 速度快；若超时可改用镜像站：
+          # GitHub 免费 runner 磁盘仅 14GB，关闭 GHA 层缓存避免磁盘叠加占用
+          # 海外机房直连 HuggingFace 速度快；若超时可改用镜像站：
           # build-args: |
           #   HF_ENDPOINT=https://hf-mirror.com
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Make image public (for RunPod pull)
         run: |
