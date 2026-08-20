@@ -85,7 +85,8 @@ def _load_model():
             use_cuda_kernel=False,  # 最小 base 镜像无 nvcc，走官方 torch 回退（无推理损失）
             use_qwen_emo=True,      # 加载官方 Qwen 情绪模型（emo-text 控制必需）
         )
-        m.eval()
+        # 注意: 官方 IndexTTS2 类无 eval() 方法(各子模型在 __init__ 内已自行 eval),
+        # 调用 m.eval() 会 AttributeError 导致推理崩溃, 故不调用。
         _model = m
         logger.info("Model ready in %.1fs", time.time() - t0)
     return _model
