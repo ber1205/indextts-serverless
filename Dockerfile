@@ -2,11 +2,11 @@
 # ===========================================================================
 # IndexTTS 2.5 — RunPod Serverless（官方完整版，零功能缺失）
 # ---------------------------------------------------------------------------
-# 磁盘优化版：GitHub 免费 runner 仅 14GB，devel 镜像 10GB 会爆盘。
-# 方案：nvidia/cuda:12.8.1-base（约 180MB，最小 CUDA 运行时）
-#   + BigVGAN 走官方 torch 回退实现（use_cuda_kernel=False，
-#     官方代码 index-tts 自带 alias_free_activation/torch，推理无损失）
-#   + 权重烘焙 /app/checkpoints
+# 磁盘优化：GitHub 免费 runner 仅 14GB。
+#   - 最小 CUDA base 镜像（180MB）+ 官方代码 + 轻量依赖（不含 torch）
+#   - 权重在容器首次启动时下载到 /app/checkpoints（RunPod 支持挂载网络卷，
+#     一次下载后续实例复用；规避构建磁盘/超时限制）
+#   - BigVGAN 走官方 torch 回退（use_cuda_kernel=False，无推理损失）
 # ===========================================================================
 FROM nvidia/cuda:12.8.1-base-ubuntu22.04
 
@@ -24,18 +24,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. 官方代码 + uv 依赖
+# 2. 官方代码（不含权重，运行期下载）
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/index-tts/index-tts.git /app/index-tts
 WORKDIR /app/index-tts
 RUN python3 -m pip install --no-cache-dir -q uv \
-    && (python3 -m uv sync --frozen 2>/dev/null || python3 -m uv sync)
+    && (python3 -m uv sync --frozen 2>/dev/null || python3 -m uv sync) \
+    || python3 -m uv sync
 
-# 3. 烘焙官方全量权重（含 qwen 情绪模型 + hf_cache 辅助模型）
-COPY preload_models.py /app/preload_models.py
-RUN /app/index-tts/.venv/bin/python /app/preload_models.py
-
-# 4. RunPod 网关 + handler
+# 3. RunPod 网关 + handler（轻量，不装 torch，避免大体积）
 RUN /app/index-tts/.venv/bin/pip install -q "runpod>=1.6.0" fastapi uvicorn aiohttp
 
 COPY handler.py /app/index-tts/handler.py

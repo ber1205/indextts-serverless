@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("indextts-serverless")
 
 # ---------------------------------------------------------------------------
-# 全局配置（镜像内已烘焙权重）
+# 全局配置
 # ---------------------------------------------------------------------------
 MODEL_DIR = os.environ.get("MODEL_DIR", "/app/checkpoints")
 PRELOAD = os.environ.get("PRELOAD", "1") == "1"          # 容器启动即后台预加载
@@ -41,12 +41,31 @@ _model_lock = threading.Lock()
 
 
 # ===========================================================================
-# 模型管理（懒加载 + 启动预加载 + 线程安全）
+# 模型管理（首次启动下载权重 + 懒加载 + 线程安全）
 # ===========================================================================
+def _ensure_weights():
+    """确保官方全量权重已就绪（首次冷启动自动下载，含 qwen 情绪模型 + hf_cache）。"""
+    config_path = os.path.join(MODEL_DIR, "config.yaml")
+    if os.path.isfile(config_path):
+        return
+
+    import huggingface_hub
+    from indextts.utils.model_download import ensure_models_available
+
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    logger.info("Weights missing; downloading official IndexTeam/IndexTTS-2.5 ...")
+    t0 = time.time()
+    huggingface_hub.snapshot_download("IndexTeam/IndexTTS-2.5", local_dir=MODEL_DIR)
+    logger.info("Official weights downloaded in %.0fs", time.time() - t0)
+    ensure_models_available(MODEL_DIR)
+    logger.info("Auxiliary models ready in %s/hf_cache", MODEL_DIR)
+
+
 def _load_model():
     """加载官方 IndexTTS2（bf16）。首次调用会较慢，之后常驻显存。"""
     global _model
     if _model is None:
+        _ensure_weights()
         import torch
         from indextts.infer_v2_5 import IndexTTS2
 
