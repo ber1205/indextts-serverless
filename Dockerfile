@@ -32,8 +32,8 @@ RUN python3 -m pip install --no-cache-dir -q uv \
     && (python3 -m uv sync --frozen 2>/dev/null || python3 -m uv sync) \
     || python3 -m uv sync
 
-# 3. RunPod 网关 + handler（轻量，不装 torch，避免大体积）
-RUN /app/index-tts/.venv/bin/pip install -q "runpod>=1.6.0" fastapi uvicorn aiohttp
+# 3. RunPod 网关 + handler（轻量；uv venv 无 pip，用 uv pip 安装）
+RUN python3 -m uv pip install --no-cache-dir -q "runpod>=1.6.0" fastapi uvicorn aiohttp
 
 COPY handler.py /app/index-tts/handler.py
 COPY test_input.json /app/index-tts/test_input.json
