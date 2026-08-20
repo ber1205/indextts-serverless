@@ -34,6 +34,8 @@ RUN python3 -m pip install --no-cache-dir -q uv \
 
 # 3. 烘焙官方全量权重（含 qwen 情绪模型 + hf_cache 辅助模型）
 COPY preload_models.py /app/preload_models.py
+# hf_transfer 加速权重下载（HF_HUB_ENABLE_HF_TRANSFER=1 需要）
+RUN /app/index-tts/.venv/bin/pip install --no-cache-dir -q hf_transfer
 RUN /app/index-tts/.venv/bin/python /app/preload_models.py
 
 # 4. RunPod 网关 + handler
