@@ -35,14 +35,16 @@ RUN python3 -m pip install --no-cache-dir -q uv \
     || python3 -m uv sync
 
 # 3. RunPod 网关 + handler + HF 下载器（轻量；uv venv 无 pip，用 uv pip 安装）
-RUN python3 -m uv pip install --no-cache-dir -q "runpod>=1.6.0" fastapi uvicorn aiohttp "huggingface-hub[cli,hf_xet]"
+# 注意: runpod>=1.10.1 必装！官方文档: SDK 1.7.11-1.10.0 在"网络卷端点"上会损坏
+# worker 任务跟踪, 导致 worker 就绪却不拉取任务(任务永远 IN_QUEUE)。固定最新版。
+RUN python3 -m uv pip install --no-cache-dir -q "runpod==1.12.0" fastapi uvicorn aiohttp "huggingface-hub[cli,hf_xet]"
 
 COPY handler.py /app/index-tts/handler.py
 COPY test_input.json /app/index-tts/test_input.json
 
 ENV PATH="/app/index-tts/.venv/bin:$PATH" \
     MODEL_DIR="/runpod-volume" \
-    PRELOAD="1"
+    PRELOAD="0"
 
 WORKDIR /app/index-tts
 EXPOSE 8000
